@@ -202,16 +202,28 @@ GIFT_CODE_PREFIXES = [
     'g_',        # Short gift prefix
 ]
 
-# Prefixes to IGNORE (not gifts)
+# Prefixes to IGNORE (not gifts, not giveaways)
 IGNORE_CODE_PREFIXES = [
     'mup_',      # grouphelpbot - channel subscribe
-    'lot_',      # bestrandom_bot - lottery
     'ref_',      # referral links
     'sub_',      # subscription links
-    'join_',     # join group/channel
     'invite_',   # invite links
     'promo_',    # promo codes (not money)
-    'bonus_',    # bonus (usually not money)
+]
+
+# Giveaway/lottery bots to AUTO-JOIN
+GIVEAWAY_BOTS = [
+    'random1zebot',      # Lottery bot
+    'bestrandom_bot',    # Lottery/giveaway bot  
+    'randomizebot',      # Another lottery bot
+]
+
+# URL patterns for giveaways to AUTO-JOIN
+GIVEAWAY_URL_PATTERNS = [
+    '/joinlot',          # Random1zeBot lottery
+    '/giveaway',         # Giveaway mini apps
+    '/lottery',          # Lottery mini apps
+    '/raffle',           # Raffle mini apps
 ]
 
 BLACKLIST = [
@@ -305,6 +317,22 @@ async def smart_claim(client, event):
                 original_url = btn.url
                 start_param = None
                 target_bot = None
+                is_giveaway = False
+
+                # Check if this is a giveaway/lottery URL - we want to JOIN these!
+                for pattern in GIVEAWAY_URL_PATTERNS:
+                    if pattern in url:
+                        logger.info(f"🎰 РОЗЫГРЫШ: паттерн '{pattern}' — участвуем!")
+                        is_giveaway = True
+                        break
+
+                # Check if URL is from giveaway bot
+                if not is_giveaway:
+                    for bot in GIVEAWAY_BOTS:
+                        if f"t.me/{bot}" in url or f"/{bot}/" in url:
+                            logger.info(f"🎰 РОЗЫГРЫШ: бот @{bot} — участвуем!")
+                            is_giveaway = True
+                            break
 
                 # Extract start parameter (gift code)
                 if "start=" in url:
@@ -313,17 +341,22 @@ async def smart_claim(client, event):
                     start_param = url.split("startapp=")[1].split("&")[0]
                 
                 if start_param:
-                    # Check if this is a real gift code
-                    is_gift, reason = is_gift_code(start_param)
-                    
-                    if not is_gift:
-                        logger.info(f"⏭️ ПРОПУСК: код '{start_param[:25]}' — {reason}")
-                        stats.codes_skipped += 1
-                        continue
-                    
-                    logger.info(f"🔗 URL кнопка с кодом: {start_param}")
-                    logger.info(f"   📋 Анализ: {reason}")
-                    stats.gifts_detected += 1
+                    # If it's a giveaway - skip gift code check, just participate
+                    if is_giveaway:
+                        logger.info(f"🎰 Код розыгрыша: {start_param}")
+                        stats.gifts_detected += 1
+                    else:
+                        # Check if this is a real gift code
+                        is_gift, reason = is_gift_code(start_param)
+                        
+                        if not is_gift:
+                            logger.info(f"⏭️ ПРОПУСК: код '{start_param[:25]}' — {reason}")
+                            stats.codes_skipped += 1
+                            continue
+                        
+                        logger.info(f"🔗 URL кнопка с кодом: {start_param}")
+                        logger.info(f"   📋 Анализ: {reason}")
+                        stats.gifts_detected += 1
                     
                     # Try to extract bot username from URL
                     if "t.me/" in url:
