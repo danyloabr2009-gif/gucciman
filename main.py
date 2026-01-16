@@ -80,6 +80,7 @@ class Stats:
         self.last_gift_time = None
         self.restarts = 0
         self.preloaded_bots = 0
+        self.codes_skipped = 0  # Codes filtered out
     
     def uptime(self):
         if not self.start_time:
@@ -114,12 +115,24 @@ async def notify(message: str, silent: bool = False):
 async def notify_gift(bot: str, code: str, elapsed_ms: int, success: bool):
     """Send gift notification."""
     status = "✅ УСПЕХ" if success else "❌ ОШИБКА"
+    
+    # Determine code type
+    code_type = "неизвестный"
+    for prefix in GIFT_CODE_PREFIXES:
+        if code.lower().startswith(prefix):
+            code_type = prefix.rstrip('_')
+            break
+    
     msg = f"""🎁 **ПОДАРОК {status}**
 
 🤖 Бот: @{bot}
-🔑 Код: `{code[:30]}...`
+🔑 Код: `{code}`
+📋 Тип: {code_type}
 ⏱ Время: {elapsed_ms}ms
-📊 Всего поймано: {stats.gifts_claimed}
+
+📊 Статистика:
+   Поймано: {stats.gifts_claimed}
+   Пропущено: {stats.codes_skipped}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}"""
     await notify(msg)
@@ -176,6 +189,31 @@ def create_client():
 # ============================================================================
 # GIFT CLAIMING LOGIC
 # ============================================================================
+
+# Prefixes of REAL gift/check codes (case-insensitive)
+GIFT_CODE_PREFIXES = [
+    'chk_',      # anonimgifterbot checks
+    'c_',        # CryptoBot checks  
+    'ck_',       # CryptoBot alternative
+    't6_',       # Wallet TON checks
+    'gift_',     # Generic gift prefix
+    'ton_',      # TON gifts
+    'start_',    # Some bots use this
+    'g_',        # Short gift prefix
+]
+
+# Prefixes to IGNORE (not gifts)
+IGNORE_CODE_PREFIXES = [
+    'mup_',      # grouphelpbot - channel subscribe
+    'lot_',      # bestrandom_bot - lottery
+    'ref_',      # referral links
+    'sub_',      # subscription links
+    'join_',     # join group/channel
+    'invite_',   # invite links
+    'promo_',    # promo codes (not money)
+    'bonus_',    # bonus (usually not money)
+]
+
 BLACKLIST = [
     'разб', 'unban', 'report', 'жал', 'rule', 'правил', 
     'verify', 'kick', 'ban', 'mute', 'admin', 'отмен',
@@ -187,6 +225,23 @@ WHITELIST = [
     'view', 'open', 'открыть', 'чек', 'gift', 'подарок',
     'receive', 'collect', 'activate'
 ]
+
+def is_gift_code(code: str) -> tuple[bool, str]:
+    """Check if code looks like a real gift. Returns (is_gift, reason)."""
+    code_lower = code.lower()
+    
+    # First check if it's in ignore list
+    for prefix in IGNORE_CODE_PREFIXES:
+        if code_lower.startswith(prefix):
+            return False, f"игнор-префикс '{prefix}'"
+    
+    # Then check if it's a known gift prefix
+    for prefix in GIFT_CODE_PREFIXES:
+        if code_lower.startswith(prefix):
+            return True, f"подарок '{prefix}'"
+    
+    # Unknown prefix - still try (might be new format)
+    return True, "неизвестный формат (пробуем)"
 
 async def smart_claim(client, event):
     """Detect and claim gifts from message buttons."""
@@ -258,7 +313,17 @@ async def smart_claim(client, event):
                     start_param = url.split("startapp=")[1].split("&")[0]
                 
                 if start_param:
-                    logger.info(f"🔗 URL кнопка с кодом: {start_param[:20]}...")
+                    # Check if this is a real gift code
+                    is_gift, reason = is_gift_code(start_param)
+                    
+                    if not is_gift:
+                        logger.info(f"⏭️ ПРОПУСК: код '{start_param[:25]}' — {reason}")
+                        stats.codes_skipped += 1
+                        continue
+                    
+                    logger.info(f"🔗 URL кнопка с кодом: {start_param}")
+                    logger.info(f"   📋 Анализ: {reason}")
+                    stats.gifts_detected += 1
                     
                     # Try to extract bot username from URL
                     if "t.me/" in url:
@@ -352,15 +417,17 @@ def setup_handlers(client):
 
 def log_stats():
     """Log current statistics."""
-    logger.info("=" * 40)
+    logger.info("=" * 50)
     logger.info(f"📊 СТАТИСТИКА | Uptime: {stats.uptime()}")
-    logger.info(f"   Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
-    logger.info(f"   Подарков найдено: {stats.gifts_detected}")
-    logger.info(f"   Успешно: {stats.gifts_claimed} | Ошибок: {stats.gifts_failed}")
+    logger.info(f"   📨 Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
+    logger.info(f"   🎁 Подарков найдено: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
+    logger.info(f"   ✅ Успешно: {stats.gifts_claimed} | ❌ Ошибок: {stats.gifts_failed}")
     if stats.gifts_detected > 0:
         success_rate = (stats.gifts_claimed / stats.gifts_detected) * 100
-        logger.info(f"   Успешность: {success_rate:.1f}%")
-    logger.info("=" * 40)
+        logger.info(f"   📈 Успешность: {success_rate:.1f}%")
+    if stats.last_gift_time:
+        logger.info(f"   ⏰ Последний подарок: {stats.last_gift_time.strftime('%H:%M:%S')}")
+    logger.info("=" * 50)
 
 # ============================================================================
 # LOGIN SYSTEM
