@@ -151,18 +151,25 @@ async def notify_gift(bot: str, code: str, elapsed_ms: int, success: bool):
 # ============================================================================
 async def preload_bots(client: TelegramClient):
     """Preload bots to warm up connections for faster claiming."""
-    logger.info(f"🔄 Предзагрузка ботов ({len(PRELOAD_BOTS)})...")
+    logger.info(f"🔄 Предзагрузка ботов для ускорения...")
     
-    for bot in PRELOAD_BOTS:
+    start_time = time.time()
+    success_count = 0
+    
+    for i, bot in enumerate(PRELOAD_BOTS, 1):
+        logger.info(f"   [{i}/{len(PRELOAD_BOTS)}] Проверяю @{bot}...")
         try:
             entity = await client.get_entity(bot)
             stats.preloaded_bots += 1
-            logger.info(f"   ✅ @{bot} загружен (ID: {entity.id})")
+            success_count += 1
+            bot_name = getattr(entity, 'first_name', 'No name')
+            logger.info(f"      ✅ @{bot} | {bot_name} (ID: {entity.id})")
         except Exception as e:
-            logger.warning(f"   ⚠️ @{bot} не найден: {e}")
-        await asyncio.sleep(0.3)  # Avoid flood
+            logger.warning(f"      ⚠️ @{bot} не найден: {e}")
+        await asyncio.sleep(0.2)  # Avoid flood
     
-    logger.info(f"🔄 Предзагрузка завершена: {stats.preloaded_bots}/{len(PRELOAD_BOTS)}")
+    elapsed = int((time.time() - start_time) * 1000)
+    logger.info(f"🔄 Предзагрузка завершена за {elapsed}ms: {success_count}/{len(PRELOAD_BOTS)} ботов готовы")
 
 # ============================================================================
 # VALIDATION
@@ -436,32 +443,38 @@ async def process_message(client, event):
     receive_time = time.time()
     
     # Get chat info
-    chat_title = "Channel"
+    chat_title = "Unknown"
+    chat_id = event.chat_id
     try:
         chat = await event.get_chat()
         if hasattr(chat, 'title'):
-            chat_title = chat.title[:20]
+            chat_title = chat.title[:30]
+        elif hasattr(chat, 'username'):
+            chat_title = f"@{chat.username}"
     except Exception:
         pass
     
     message = event.message
     has_buttons = bool(message.buttons)
-    text_preview = (message.text or "")[:40].replace('\n', ' ')
+    text_preview = (message.text or "")[:50].replace('\n', ' ')
     if not text_preview and message.media:
         text_preview = "[Медиа]"
     
-    # Log incoming message
-    btn_info = f" [🔘 {sum(len(r) for r in message.buttons)} кнопок]" if has_buttons else ""
-    logger.info(f"📨 #{stats.messages_total} | {chat_title}{btn_info}")
+    # Log incoming message with more details
+    btn_count = sum(len(r) for r in message.buttons) if message.buttons else 0
+    btn_info = f" [🔘 {btn_count}]" if has_buttons else ""
+    logger.info(f"📨 #{stats.messages_total} | {chat_title} ({chat_id}){btn_info}")
     if text_preview:
-        logger.debug(f"   Текст: {text_preview}...")
+        logger.debug(f"   📝 Текст: {text_preview}...")
     
     # Try to claim
+    claim_start = time.time()
     was_gift = await smart_claim(client, event)
     
     if was_gift:
-        elapsed = int((time.time() - receive_time) * 1000)
-        logger.info(f"🎁 ПОДАРОК ОБРАБОТАН! Общее время: {elapsed}ms")
+        total_elapsed = int((time.time() - receive_time) * 1000)
+        claim_elapsed = int((time.time() - claim_start) * 1000)
+        logger.info(f"🎁 ПОДАРОК ОБРАБОТАН! Общее: {total_elapsed}ms | Обработка: {claim_elapsed}ms")
         log_stats()
 
 def setup_handlers(client):
@@ -474,17 +487,34 @@ def setup_handlers(client):
 
 def log_stats():
     """Log current statistics."""
-    logger.info("=" * 50)
+    logger.info("=" * 60)
     logger.info(f"📊 СТАТИСТИКА | Uptime: {stats.uptime()}")
     logger.info(f"   📨 Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
-    logger.info(f"   🎁 Подарков найдено: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
+    logger.info(f"   🎁 Подарков: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
     logger.info(f"   ✅ Успешно: {stats.gifts_claimed} | ❌ Ошибок: {stats.gifts_failed}")
+    
     if stats.gifts_detected > 0:
         success_rate = (stats.gifts_claimed / stats.gifts_detected) * 100
         logger.info(f"   📈 Успешность: {success_rate:.1f}%")
+    
+    if stats.messages_total > 0:
+        button_rate = (stats.messages_with_buttons / stats.messages_total) * 100
+        logger.info(f"   🔘 С кнопками: {button_rate:.1f}% сообщений")
+    
     if stats.last_gift_time:
-        logger.info(f"   ⏰ Последний подарок: {stats.last_gift_time.strftime('%H:%M:%S')}")
-    logger.info("=" * 50)
+        time_ago = int((datetime.now() - stats.last_gift_time).total_seconds())
+        if time_ago < 60:
+            time_str = f"{time_ago}s назад"
+        elif time_ago < 3600:
+            time_str = f"{time_ago//60}m назад"
+        else:
+            time_str = f"{time_ago//3600}h назад"
+        logger.info(f"   ⏰ Последний подарок: {time_str}")
+    
+    if stats.restarts > 0:
+        logger.info(f"   🔄 Перезапусков: {stats.restarts}")
+    
+    logger.info("=" * 60)
 
 # ============================================================================
 # LOGIN SYSTEM
@@ -560,7 +590,23 @@ async def run_client():
         logger.info("")
         
         # Send startup notification
-        await notify(f"🚀 Gift Claimer запущен!\n📡 Каналов: {len(TARGET_CHANNELS)}\n🤖 Ботов загружено: {stats.preloaded_bots}", silent=True)
+        channels_list = "\n".join([f"• {ch}" for ch in TARGET_CHANNELS[:5]])
+        if len(TARGET_CHANNELS) > 5:
+            channels_list += f"\n... и еще {len(TARGET_CHANNELS)-5}"
+        
+        bots_list = "\n".join([f"• @{bot}" for bot in PRELOAD_BOTS[:5]])
+        if len(PRELOAD_BOTS) > 5:
+            bots_list += f"\n... и еще {len(PRELOAD_BOTS)-5}"
+        
+        await notify(f"""🚀 **Gift Claimer запущен!**
+
+📡 **Каналы ({len(TARGET_CHANNELS)}):**
+{channels_list}
+
+🤖 **Боты для предзагрузки ({len(PRELOAD_BOTS)}):**
+{bots_list}
+
+✅ Загружено: {stats.preloaded_bots}/{len(PRELOAD_BOTS)}""", silent=True)
         
         await client.run_until_disconnected()
         return False  # Normal disconnect
@@ -601,7 +647,9 @@ async def main():
     for i, ch in enumerate(TARGET_CHANNELS, 1):
         logger.info(f"   {i}. {ch}")
     logger.info("")
-    logger.info(f"🤖 PRELOAD BOTS: {', '.join(PRELOAD_BOTS[:5])}...")
+    logger.info(f"🤖 PRELOAD BOTS ({len(PRELOAD_BOTS)}):")
+    for i, bot in enumerate(PRELOAD_BOTS, 1):
+        logger.info(f"   {i}. @{bot}")
     logger.info(f"🔍 WHITELIST: {', '.join(WHITELIST[:5])}...")
     logger.info(f"⛔ BLACKLIST: {', '.join(BLACKLIST[:5])}...")
     logger.info("=" * 50)
