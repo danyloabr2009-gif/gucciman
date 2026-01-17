@@ -118,10 +118,19 @@ async def notify_gift(bot: str, code: str, elapsed_ms: int, success: bool):
     
     # Determine code type
     code_type = "неизвестный"
-    for prefix in GIFT_CODE_PREFIXES:
-        if code.lower().startswith(prefix):
-            code_type = prefix.rstrip('_')
+    code_lower = code.lower()
+    
+    # Check giveaways first
+    for prefix in GIVEAWAY_CODE_PREFIXES:
+        if code_lower.startswith(prefix):
+            code_type = f"розыгрыш ({prefix.rstrip('_')})"
             break
+    else:
+        # Then check gifts
+        for prefix in GIFT_CODE_PREFIXES:
+            if code_lower.startswith(prefix):
+                code_type = prefix.rstrip('_')
+                break
     
     msg = f"""🎁 **ПОДАРОК {status}**
 
@@ -202,6 +211,14 @@ GIFT_CODE_PREFIXES = [
     'g_',        # Short gift prefix
 ]
 
+# Prefixes for GIVEAWAYS (auto-join)
+GIVEAWAY_CODE_PREFIXES = [
+    'lot_join_',      # bestrandom_bot lottery
+    'lot_',           # general lottery
+    'join_',          # join giveaways
+    'bonus_',         # bonus giveaways
+]
+
 # Prefixes to IGNORE (not gifts, not giveaways)
 IGNORE_CODE_PREFIXES = [
     'mup_',      # grouphelpbot - channel subscribe
@@ -242,7 +259,12 @@ def is_gift_code(code: str) -> tuple[bool, str]:
     """Check if code looks like a real gift. Returns (is_gift, reason)."""
     code_lower = code.lower()
     
-    # First check if it's in ignore list
+    # First check if it's a giveaway code
+    for prefix in GIVEAWAY_CODE_PREFIXES:
+        if code_lower.startswith(prefix):
+            return True, f"розыгрыш '{prefix}'"
+    
+    # Then check if it's in ignore list
     for prefix in IGNORE_CODE_PREFIXES:
         if code_lower.startswith(prefix):
             return False, f"игнор-префикс '{prefix}'"
@@ -341,22 +363,24 @@ async def smart_claim(client, event):
                     start_param = url.split("startapp=")[1].split("&")[0]
                 
                 if start_param:
-                    # If it's a giveaway - skip gift code check, just participate
-                    if is_giveaway:
+                    # Check if this is a real gift code
+                    is_gift, reason = is_gift_code(start_param)
+                    
+                    if not is_gift:
+                        logger.info(f"⏭️ ПРОПУСК: код '{start_param[:25]}' — {reason}")
+                        stats.codes_skipped += 1
+                        continue
+                    
+                    # Determine if it's a giveaway by the reason
+                    is_giveaway_code = "розыгрыш" in reason
+                    
+                    if is_giveaway_code:
                         logger.info(f"🎰 Код розыгрыша: {start_param}")
-                        stats.gifts_detected += 1
                     else:
-                        # Check if this is a real gift code
-                        is_gift, reason = is_gift_code(start_param)
-                        
-                        if not is_gift:
-                            logger.info(f"⏭️ ПРОПУСК: код '{start_param[:25]}' — {reason}")
-                            stats.codes_skipped += 1
-                            continue
-                        
                         logger.info(f"🔗 URL кнопка с кодом: {start_param}")
-                        logger.info(f"   📋 Анализ: {reason}")
-                        stats.gifts_detected += 1
+                    
+                    logger.info(f"   📋 Анализ: {reason}")
+                    stats.gifts_detected += 1
                     
                     # Try to extract bot username from URL
                     if "t.me/" in url:
