@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, types, functions
 from telethon.sessions import StringSession
 from telethon.tl.functions.messages import GetBotCallbackAnswerRequest
 from telethon.errors import SessionPasswordNeededError, FloodWaitError
@@ -223,6 +223,30 @@ BUTTON_PRESS_BOTS = [
     'anonimgifterbot',    # Needs button press for chk_ codes
 ]
 
+# Gift code prefixes that should use BUTTON PRESS instead of /start
+BUTTON_PRESS_CODES = [
+    'chk_',      # anonimgifterbot checks
+    'c_',        # CryptoBot checks  
+    'ck_',       # CryptoBot alternative
+    't6_',       # Wallet TON checks
+    'gift_',     # Generic gift prefix
+    'ton_',      # TON gifts
+    'start_',    # Some bots use this
+    'g_',        # Short gift prefix
+]
+
+# Keywords for giveaway participation buttons
+GIVEAWAY_BUTTONS = [
+    'участвовать', 'участие', 'join', 'take part', 'учавствовать',
+    'принять участие', 'enter', 'participate', 'register'
+]
+
+# Keywords for subscription requirements
+SUBSCRIPTION_KEYWORDS = [
+    'подпишись', 'подписка', 'subscribe', 'подпишитесь',
+    'подписывайтесь', 'following', 'follow', 'тгк', 'канал'
+]
+
 # Prefixes for GIVEAWAYS (auto-join)
 GIVEAWAY_CODE_PREFIXES = [
     'lot_join_',      # bestrandom_bot lottery
@@ -302,6 +326,14 @@ async def smart_claim(client, event):
     stats.messages_with_buttons += 1
     button_count = sum(len(row) for row in message.buttons)
     logger.info(f"🔘 Сообщение с кнопками! Найдено кнопок: {button_count}")
+    
+    # Check if this is a giveaway with conditions
+    message_text = (message.text or "").lower()
+    has_subscription = any(word in message_text for word in SUBSCRIPTION_KEYWORDS)
+    
+    if has_subscription:
+        logger.info(f"🎁 Обнаружен розыгрыш с условиями подписки")
+        return await process_giveaway_with_conditions(client, event, message)
 
     for row_idx, row in enumerate(message.buttons):
         for btn_idx, btn in enumerate(row):
@@ -311,6 +343,13 @@ async def smart_claim(client, event):
             # Log each button
             btn_type = "URL" if btn.url else ("CALLBACK" if btn.data else "OTHER")
             logger.debug(f"   [{row_idx}:{btn_idx}] {btn_type}: '{btn_display}'")
+            
+            # Check for giveaway participation buttons
+            is_giveaway_button = any(word in btn_text for word in GIVEAWAY_BUTTONS)
+            if is_giveaway_button:
+                logger.info(f"🎰 Найдена кнопка участия: '{btn_display}'")
+                stats.gifts_detected += 1
+                return await process_giveaway_participation(client, event, btn, message)
             
             # Blacklist check
             matched_blacklist = [w for w in BLACKLIST if w in btn_text]
@@ -370,31 +409,6 @@ async def smart_claim(client, event):
                             is_giveaway = True
                             break
 
-                # For anonimgifterbot - just press the button without extracting code
-                if target_bot in BUTTON_PRESS_BOTS:
-                    logger.info(f"🎁 Найден чек @{target_bot} - нажимаю кнопку")
-                    stats.gifts_detected += 1
-                    
-                    # Press the button directly
-                    logger.info(f"🎯 Нажимаю кнопку 'Активировать чек' @{target_bot}")
-                    try:
-                        await client(GetBotCallbackAnswerRequest(
-                            peer=event.chat_id,
-                            msg_id=message.id,
-                            data=btn.data if btn.data else None
-                        ))
-                        elapsed = int((time.time() - claim_start) * 1000)
-                        logger.info(f"✅ УСПЕХ! Чек активирован за {elapsed}ms")
-                        stats.gifts_claimed += 1
-                        stats.last_gift_time = datetime.now()
-                        asyncio.create_task(notify_gift(target_bot, "чек", elapsed, True))
-                        return True
-                    except Exception as e:
-                        logger.error(f"❌ ОШИБКА активации чека: {e}")
-                        stats.gifts_failed += 1
-                        asyncio.create_task(notify_gift(target_bot, "чек", 0, False))
-                        return True
-                
                 # Extract start parameter (gift code) for other bots
                 if "start=" in url:
                     start_param = url.split("start=")[1].split("&")[0]
@@ -410,6 +424,34 @@ async def smart_claim(client, event):
                         stats.codes_skipped += 1
                         continue
                     
+                    # Check if this code should use button press
+                    code_lower = start_param.lower()
+                    needs_button_press = any(code_lower.startswith(prefix) for prefix in BUTTON_PRESS_CODES)
+                    
+                    if needs_button_press:
+                        logger.info(f"🎁 Найден подарок ({reason}) - нажимаю кнопку")
+                        stats.gifts_detected += 1
+                        
+                        # Press the button directly
+                        logger.info(f"🎯 Нажимаю кнопку 'Активировать чек'")
+                        try:
+                            await client(GetBotCallbackAnswerRequest(
+                                peer=event.chat_id,
+                                msg_id=message.id,
+                                data=btn.data if btn.data else None
+                            ))
+                            elapsed = int((time.time() - claim_start) * 1000)
+                            logger.info(f"✅ УСПЕХ! Подарок активирован за {elapsed}ms")
+                            stats.gifts_claimed += 1
+                            stats.last_gift_time = datetime.now()
+                            asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
+                            return True
+                        except Exception as e:
+                            logger.error(f"❌ ОШИБКА активации подарка: {e}")
+                            stats.gifts_failed += 1
+                            asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
+                            return True
+                    
                     # Determine if it's a giveaway by the reason
                     is_giveaway_code = "розыгрыш" in reason
                     
@@ -420,7 +462,8 @@ async def smart_claim(client, event):
                     
                     logger.info(f"   📋 Анализ: {reason}")
                     stats.gifts_detected += 1
-                    
+                
+                                    
                     # Try to extract bot username from URL
                     if "t.me/" in url:
                         try:
@@ -511,6 +554,108 @@ async def smart_claim(client, event):
                         logger.debug(f"   URL без бота: {original_url[:50]}")
     
     return False
+
+async def extract_channels_from_text(text: str) -> list:
+    """Extract Telegram channel usernames from text."""
+    import re
+    # Find @username patterns
+    channels = re.findall(r'@([a-zA-Z0-9_]{5,})', text)
+    return list(set(channels))  # Remove duplicates
+
+async def process_giveaway_with_conditions(client, event, message):
+    """Process giveaway with subscription conditions."""
+    claim_start = time.time()
+    try:
+        message_text = message.text or ""
+        
+        # Extract channels to subscribe
+        channels = await extract_channels_from_text(message_text)
+        logger.info(f"📋 Найдены каналы для подписки: {channels}")
+        
+        # Subscribe to channels
+        for channel in channels:
+            try:
+                await client(functions.channels.JoinChannelRequest(
+                    channel=channel
+                ))
+                logger.info(f"   ✅ Подписался на @{channel}")
+                await asyncio.sleep(0.5)  # Small delay
+            except Exception as e:
+                logger.warning(f"   ⚠️ Не удалось подписаться на @{channel}: {e}")
+        
+        # Add reaction to message
+        try:
+            # Use heart reaction
+            await client(functions.messages.SendReactionRequest(
+                peer=event.chat_id,
+                msg_id=message.id,
+                reaction=[types.ReactionEmoji(emoticon="❤️")]
+            ))
+            logger.info(f"   ❤️ Поставил реакцию на сообщение")
+        except Exception as e:
+            logger.warning(f"   ⚠️ Не удалось поставить реакцию: {e}")
+        
+        # Find and click participation button
+        for row in message.buttons:
+            for btn in row:
+                btn_text = (btn.text or "").lower()
+                if any(word in btn_text for word in GIVEAWAY_BUTTONS):
+                    logger.info(f"🎯 Нажимаю кнопку участия: '{btn.text}'")
+                    await client(GetBotCallbackAnswerRequest(
+                        peer=event.chat_id,
+                        msg_id=message.id,
+                        data=btn.data if btn.data else None
+                    ))
+                    break
+        
+        elapsed = int((time.time() - claim_start) * 1000)
+        logger.info(f"✅ УСПЕХ! Розыгрыш обработан за {elapsed}ms")
+        stats.gifts_claimed += 1
+        stats.last_gift_time = datetime.now()
+        asyncio.create_task(notify_gift("giveaway", "с условиями", elapsed, True))
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ ОШИБКА обработки розыгрыша: {e}")
+        stats.gifts_failed += 1
+        asyncio.create_task(notify_gift("giveaway", "с условиями", 0, False))
+        return False
+
+async def process_giveaway_participation(client, event, btn, message):
+    """Process simple giveaway participation."""
+    claim_start = time.time()
+    try:
+        # Add reaction first
+        try:
+            await client(functions.messages.SendReactionRequest(
+                peer=event.chat_id,
+                msg_id=message.id,
+                reaction=[types.ReactionEmoji(emoticon="❤️")]
+            ))
+            logger.info(f"   ❤️ Поставил реакцию")
+        except Exception as e:
+            logger.warning(f"   ⚠️ Не удалось поставить реакцию: {e}")
+        
+        # Click participation button
+        logger.info(f"🎯 Нажимаю кнопку: '{btn.text}'")
+        await client(GetBotCallbackAnswerRequest(
+            peer=event.chat_id,
+            msg_id=message.id,
+            data=btn.data if btn.data else None
+        ))
+        
+        elapsed = int((time.time() - claim_start) * 1000)
+        logger.info(f"✅ УСПЕХ! Участие подтверждено за {elapsed}ms")
+        stats.gifts_claimed += 1
+        stats.last_gift_time = datetime.now()
+        asyncio.create_task(notify_gift("giveaway", btn.text or "участие", elapsed, True))
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ ОШИБКА участия: {e}")
+        stats.gifts_failed += 1
+        asyncio.create_task(notify_gift("giveaway", btn.text or "участие", 0, False))
+        return False
 
 # ============================================================================
 # MESSAGE HANDLER (PARALLEL PROCESSING)
