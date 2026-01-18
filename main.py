@@ -221,20 +221,11 @@ GIFT_CODE_PREFIXES = [
 # Bots that need BUTTON PRESS instead of /start command
 BUTTON_PRESS_BOTS = [
     'anonimgifterbot',    # Needs button press for chk_ codes
-    'random1zebot',       # Lottery bot - opens Mini App
-    'bestrandom_bot',     # Giveaway bot - opens Mini App
 ]
 
 # Gift code prefixes that should use BUTTON PRESS instead of /start
 BUTTON_PRESS_CODES = [
-    'chk_',      # anonimgifterbot checks
-    'c_',        # CryptoBot checks  
-    'ck_',       # CryptoBot alternative
-    't6_',       # Wallet TON checks
-    'gift_',     # Generic gift prefix
-    'ton_',      # TON gifts
-    'start_',    # Some bots use this
-    'g_',        # Short gift prefix
+    'chk_',      # anonimgifterbot checks ONLY
 ]
 
 # Keywords for giveaway participation buttons
