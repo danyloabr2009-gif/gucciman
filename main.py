@@ -46,8 +46,8 @@ if channels_str:
             except ValueError:
                 TARGET_CHANNELS.append(ch)
 
-# Bots to preload (warm up connection)
-PRELOAD_BOTS_STR = os.getenv("PRELOAD_BOTS", "wallet,CryptoBot,send,tonRocketBot,xJetSwapBot")
+# Bots to preload (warm up connection) - anonimgifterbot first for speed
+PRELOAD_BOTS_STR = os.getenv("PRELOAD_BOTS", "anonimgifterbot,wallet,CryptoBot,send,tonRocketBot,xJetSwapBot")
 PRELOAD_BOTS = [b.strip() for b in PRELOAD_BOTS_STR.split(",") if b.strip()]
 
 # Auto-restart settings
@@ -208,14 +208,19 @@ def create_client():
 
 # Prefixes of REAL gift/check codes (case-insensitive)
 GIFT_CODE_PREFIXES = [
-    'chk_',      # anonimgifterbot checks
-    'c_',        # CryptoBot checks  
-    'ck_',       # CryptoBot alternative
-    't6_',       # Wallet TON checks
-    'gift_',     # Generic gift prefix
-    'ton_',      # TON gifts
-    'start_',    # Some bots use this
-    'g_',        # Short gift prefix
+    'chk_',      # anonimgifterbot checks (BUTTON PRESS)
+    'c_',        # CryptoBot checks (/start command)
+    'ck_',       # CryptoBot alternative (/start command)
+    't6_',       # Wallet TON checks (/start command)
+    'gift_',     # Generic gift prefix (/start command)
+    'ton_',      # TON gifts (/start command)
+    'start_',    # Some bots use this (/start command)
+    'g_',        # Short gift prefix (/start command)
+]
+
+# Bots that need BUTTON PRESS instead of /start command
+BUTTON_PRESS_BOTS = [
+    'anonimgifterbot',    # Needs button press for chk_ codes
 ]
 
 # Prefixes for GIVEAWAYS (auto-join)
@@ -363,7 +368,32 @@ async def smart_claim(client, event):
                             is_giveaway = True
                             break
 
-                # Extract start parameter (gift code)
+                # For anonimgifterbot - just press the button without extracting code
+                if target_bot in BUTTON_PRESS_BOTS:
+                    logger.info(f"🎁 Найден чек @{target_bot} - нажимаю кнопку")
+                    stats.gifts_detected += 1
+                    
+                    # Press the button directly
+                    logger.info(f"🎯 Нажимаю кнопку 'Активировать чек' @{target_bot}")
+                    try:
+                        await client(GetBotCallbackAnswerRequest(
+                            peer=event.chat_id,
+                            msg_id=message.id,
+                            data=btn.data if btn.data else None
+                        ))
+                        elapsed = int((time.time() - claim_start) * 1000)
+                        logger.info(f"✅ УСПЕХ! Чек активирован за {elapsed}ms")
+                        stats.gifts_claimed += 1
+                        stats.last_gift_time = datetime.now()
+                        asyncio.create_task(notify_gift(target_bot, "чек", elapsed, True))
+                        return True
+                    except Exception as e:
+                        logger.error(f"❌ ОШИБКА активации чека: {e}")
+                        stats.gifts_failed += 1
+                        asyncio.create_task(notify_gift(target_bot, "чек", 0, False))
+                        return True
+                
+                # Extract start parameter (gift code) for other bots
                 if "start=" in url:
                     start_param = url.split("start=")[1].split("&")[0]
                 elif "startapp=" in url:
@@ -430,26 +460,51 @@ async def smart_claim(client, event):
                                 asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
                                 return True
                         else:
-                            # For regular gifts, send /start with code
-                            logger.info(f"🎯 Отправляю /start @{target_bot}")
-                            try:
-                                await client.send_message(target_bot, f"/start {start_param}")
-                                elapsed = int((time.time() - claim_start) * 1000)
-                                logger.info(f"✅ УСПЕХ! /start отправлен за {elapsed}ms")
-                                stats.gifts_claimed += 1
-                                stats.last_gift_time = datetime.now()
-                                asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
-                                return True
-                            except FloodWaitError as e:
-                                logger.error(f"🚫 FLOOD WAIT: {e.seconds}s")
-                                stats.gifts_failed += 1
-                                asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                return True
-                            except Exception as e:
-                                logger.error(f"❌ ОШИБКА отправки /start: {e}")
-                                stats.gifts_failed += 1
-                                asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                return True
+                            # Check if this bot needs button press
+                            needs_button_press = target_bot in BUTTON_PRESS_BOTS
+                            
+                            if needs_button_press:
+                                # For anonimgifterbot - just press the button (it sends /start automatically)
+                                logger.info(f"🎯 Нажимаю кнопку 'Активировать чек' @{target_bot}")
+                                try:
+                                    # Press the button - it will automatically send /start to anonimgifterbot
+                                    await client(GetBotCallbackAnswerRequest(
+                                        peer=event.chat_id,
+                                        msg_id=message.id,
+                                        data=btn.data if btn.data else None
+                                    ))
+                                    elapsed = int((time.time() - claim_start) * 1000)
+                                    logger.info(f"✅ УСПЕХ! Кнопка нажата за {elapsed}ms")
+                                    stats.gifts_claimed += 1
+                                    stats.last_gift_time = datetime.now()
+                                    asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
+                                    return True
+                                except Exception as e:
+                                    logger.error(f"❌ ОШИБКА нажатия кнопки: {e}")
+                                    stats.gifts_failed += 1
+                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
+                                    return True
+                            else:
+                                # For regular gifts, send /start with code
+                                logger.info(f"🎯 Отправляю /start @{target_bot}")
+                                try:
+                                    await client.send_message(target_bot, f"/start {start_param}")
+                                    elapsed = int((time.time() - claim_start) * 1000)
+                                    logger.info(f"✅ УСПЕХ! /start отправлен за {elapsed}ms")
+                                    stats.gifts_claimed += 1
+                                    stats.last_gift_time = datetime.now()
+                                    asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
+                                    return True
+                                except FloodWaitError as e:
+                                    logger.error(f"🚫 FLOOD WAIT: {e.seconds}s")
+                                    stats.gifts_failed += 1
+                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
+                                    return True
+                                except Exception as e:
+                                    logger.error(f"❌ ОШИБКА отправки /start: {e}")
+                                    stats.gifts_failed += 1
+                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
+                                    return True
                     else:
                         logger.debug(f"   URL без бота: {original_url[:50]}")
     
