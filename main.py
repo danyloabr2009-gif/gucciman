@@ -344,13 +344,24 @@ async def smart_claim(client, event):
     button_count = sum(len(row) for row in message.buttons)
     logger.info(f"🔘 Сообщение с кнопками! Найдено кнопок: {button_count}")
     
-    # Check if this is a giveaway with conditions
+    # Check if this is a giveaway with conditions OR has participation buttons
     message_text = (message.text or "").lower()
     has_subscription = any(word in message_text for word in SUBSCRIPTION_KEYWORDS)
     has_reaction = any(word in message_text for word in REACTION_KEYWORDS)
     
-    if has_subscription or has_reaction:
-        logger.info(f"🎁 Обнаружен розыгрыш с условиями")
+    # Check if message has participation buttons
+    has_participation_buttons = False
+    for row in message.buttons:
+        for btn in row:
+            btn_text = (btn.text or "").lower()
+            if any(word in btn_text for word in GIVEAWAY_BUTTONS):
+                has_participation_buttons = True
+                break
+        if has_participation_buttons:
+            break
+    
+    if has_subscription or has_reaction or has_participation_buttons:
+        logger.info(f"🎁 Обнаружен розыгрыш (условия: подписка={has_subscription}, реакция={has_reaction}, кнопка={has_participation_buttons})")
         return await process_giveaway_with_conditions(client, event, message)
 
     for row_idx, row in enumerate(message.buttons):
