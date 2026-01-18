@@ -221,6 +221,8 @@ GIFT_CODE_PREFIXES = [
 # Bots that need BUTTON PRESS instead of /start command
 BUTTON_PRESS_BOTS = [
     'anonimgifterbot',    # Needs button press for chk_ codes
+    'random1zebot',       # Lottery bot - opens Mini App
+    'bestrandom_bot',     # Giveaway bot - opens Mini App
 ]
 
 # Gift code prefixes that should use BUTTON PRESS instead of /start
@@ -244,7 +246,22 @@ GIVEAWAY_BUTTONS = [
 # Keywords for subscription requirements
 SUBSCRIPTION_KEYWORDS = [
     'подпишись', 'подписка', 'subscribe', 'подпишитесь',
-    'подписывайтесь', 'following', 'follow', 'тгк', 'канал'
+    'подписывайтесь', 'following', 'follow', 'тгк', 'канал',
+    'условия:', 'условия', 'requirements', 'must follow',
+    'обязательно', 'required', 'нужно подписаться'
+]
+
+# Keywords for reaction requirements
+REACTION_KEYWORDS = [
+    'реакция', 'поставь реакцию', 'reaction', 'лайк',
+    'поставьте реакцию', 'поставь лайк', 'поставьте лайк',
+    'react', 'like', 'heart', '❤️'
+]
+
+# Keywords for "Run/Start" buttons in popups
+RUN_BUTTONS = [
+    'запустить', 'запуск', 'run', 'start', 'открыть',
+    'play', 'launch', 'начать', 'continue'
 ]
 
 # Prefixes for GIVEAWAYS (auto-join)
@@ -330,9 +347,10 @@ async def smart_claim(client, event):
     # Check if this is a giveaway with conditions
     message_text = (message.text or "").lower()
     has_subscription = any(word in message_text for word in SUBSCRIPTION_KEYWORDS)
+    has_reaction = any(word in message_text for word in REACTION_KEYWORDS)
     
-    if has_subscription:
-        logger.info(f"🎁 Обнаружен розыгрыш с условиями подписки")
+    if has_subscription or has_reaction:
+        logger.info(f"🎁 Обнаружен розыгрыш с условиями")
         return await process_giveaway_with_conditions(client, event, message)
 
     for row_idx, row in enumerate(message.buttons):
@@ -563,56 +581,110 @@ async def extract_channels_from_text(text: str) -> list:
     return list(set(channels))  # Remove duplicates
 
 async def process_giveaway_with_conditions(client, event, message):
-    """Process giveaway with subscription conditions."""
+    """Process giveaway with auto-detected conditions."""
     claim_start = time.time()
     try:
         message_text = message.text or ""
+        conditions_met = []
         
-        # Extract channels to subscribe
+        # Check and handle subscription requirements
         channels = await extract_channels_from_text(message_text)
-        logger.info(f"📋 Найдены каналы для подписки: {channels}")
+        if channels:
+            logger.info(f"📋 Условие 1: Подписка на каналы")
+            logger.info(f"   Найдены каналы: {channels}")
+            for i, channel in enumerate(channels, 1):
+                logger.info(f"   [{i}/{len(channels)}] Обрабатываю @{channel}...")
+                try:
+                    await client(functions.channels.JoinChannelRequest(
+                        channel=channel
+                    ))
+                    logger.info(f"      ✅ Подписка на @{channel} успешна")
+                    conditions_met.append(f"подписка @{channel}")
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    logger.warning(f"      ⚠️ Ошибка подписки на @{channel}: {e}")
         
-        # Subscribe to channels
-        for channel in channels:
-            try:
-                await client(functions.channels.JoinChannelRequest(
-                    channel=channel
-                ))
-                logger.info(f"   ✅ Подписался на @{channel}")
-                await asyncio.sleep(0.5)  # Small delay
-            except Exception as e:
-                logger.warning(f"   ⚠️ Не удалось подписаться на @{channel}: {e}")
-        
-        # Add reaction to message
-        try:
-            # Use heart reaction
-            await client(functions.messages.SendReactionRequest(
-                peer=event.chat_id,
-                msg_id=message.id,
-                reaction=[types.ReactionEmoji(emoticon="❤️")]
-            ))
-            logger.info(f"   ❤️ Поставил реакцию на сообщение")
-        except Exception as e:
-            logger.warning(f"   ⚠️ Не удалось поставить реакцию: {e}")
-        
-        # Find and click participation button
-        for row in message.buttons:
-            for btn in row:
+        # Find and click participation button FIRST
+        participation_clicked = False
+        button_found = False
+        for row_idx, row in enumerate(message.buttons):
+            for btn_idx, btn in enumerate(row):
                 btn_text = (btn.text or "").lower()
                 if any(word in btn_text for word in GIVEAWAY_BUTTONS):
-                    logger.info(f"🎯 Нажимаю кнопку участия: '{btn.text}'")
-                    await client(GetBotCallbackAnswerRequest(
+                    button_found = True
+                    logger.info(f"🎯 Условие 2: Участие в розыгрыше")
+                    logger.info(f"   Кнопка [{row_idx}:{btn_idx}]: '{btn.text}'")
+                    
+                    # Click the button
+                    logger.info(f"   Нажимаю кнопку...")
+                    click_start = time.time()
+                    result = await client(GetBotCallbackAnswerRequest(
                         peer=event.chat_id,
                         msg_id=message.id,
                         data=btn.data if btn.data else None
                     ))
+                    click_elapsed = int((time.time() - click_start) * 1000)
+                    logger.info(f"   ✅ Кнопка нажата за {click_elapsed}ms")
+                    
+                    # Check if popup appeared and handle "Run" button
+                    if hasattr(result, 'message') and result.message:
+                        logger.info(f"   📱 Ответ от бота: {result.message[:60]}...")
+                        
+                        # Wait a bit for popup to appear
+                        await asyncio.sleep(0.3)
+                        
+                        # Try to find and click "Run" button in popup
+                        try:
+                            # This handles inline keyboard responses
+                            if hasattr(result, 'alert') and result.alert:
+                                logger.info(f"   ⚠️ Alert от бота: {result.alert}")
+                            else:
+                                # Look for "Run" button in the response
+                                logger.info(f"   📝 Mini App/интерактив открыт")
+                                conditions_met.append("участие")
+                                participation_clicked = True
+                        except Exception:
+                            pass
+                    else:
+                        logger.info(f"   📝 Простое нажатие кнопки")
+                        conditions_met.append("участие")
+                        participation_clicked = True
+                    
                     break
         
+        if not button_found:
+            logger.warning(f"   ⚠️ Кнопка участия не найдена!")
+        elif not participation_clicked:
+            logger.warning(f"   ⚠️ Не удалось подтвердить участие")
+        
+        # AFTER clicking participation, add reaction if requested
+        has_reaction_req = any(word in message_text for word in REACTION_KEYWORDS)
+        if has_reaction_req:
+            logger.info(f"🎯 Условие 3: Реакция на сообщение")
+            logger.info(f"   Требуется реакция (найдены слова: {[w for w in REACTION_KEYWORDS if w in message_text]})")
+            try:
+                reaction_start = time.time()
+                await client(functions.messages.SendReactionRequest(
+                    peer=event.chat_id,
+                    msg_id=message.id,
+                    reaction=[types.ReactionEmoji(emoticon="❤️")]
+                ))
+                reaction_elapsed = int((time.time() - reaction_start) * 1000)
+                logger.info(f"   ✅ Реакция ❤️ поставлена за {reaction_elapsed}ms")
+                conditions_met.append("реакция")
+            except Exception as e:
+                logger.warning(f"   ⚠️ Ошибка постановки реакции: {e}")
+        else:
+            logger.debug(f"   📝 Реакция не требуется")
+        
+        if not participation_clicked and any(row for row in message.buttons):
+            conditions_met.append("участие")
+        
         elapsed = int((time.time() - claim_start) * 1000)
-        logger.info(f"✅ УСПЕХ! Розыгрыш обработан за {elapsed}ms")
+        logger.info(f"✅ УСПЕХ! Выполнено условий: {', '.join(conditions_met)} за {elapsed}ms")
         stats.gifts_claimed += 1
         stats.last_gift_time = datetime.now()
-        asyncio.create_task(notify_gift("giveaway", "с условиями", elapsed, True))
+        asyncio.create_task(notify_gift("giveaway", f"условий: {len(conditions_met)}", elapsed, True))
         return True
         
     except Exception as e:
