@@ -258,7 +258,9 @@ GIVEAWAY_URL_PATTERNS = [
 BLACKLIST = [
     'разб', 'unban', 'report', 'жал', 'rule', 'правил', 
     'verify', 'kick', 'ban', 'mute', 'admin', 'отмен',
-    'подписаться', 'subscribe', 'join', 'канал', 'channel'
+    'подписаться', 'subscribe', 'join', 'канал', 'channel',
+    'разблокировать', 'заблокировать', 'блокировать', 'unlock',
+    'забан', 'разбан', 'block', 'unblock', 'заблок', 'разблок'
 ]
 
 WHITELIST = [
