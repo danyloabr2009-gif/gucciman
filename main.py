@@ -498,13 +498,18 @@ async def smart_claim(client, event):
                         except Exception:
                             pass
                     
-                    # Fallback to default bot if text matches
+                    # Check if target_bot is actually a bot (not a channel)
+                    # Common giveaway channels to avoid
+                    giveaway_channels = ['giveaway', 'gifts', 'crypto', 'ton', 'prize', 'lottery']
+                    is_channel = any(channel in target_bot.lower() for channel in giveaway_channels) if target_bot else False
+                    
+                    # Fallback to default bot if text matches and not a channel
                     if not target_bot and is_gift_text:
                         target_bot = DEFAULT_GIFT_BOT
                         logger.debug(f"   Бот не найден в URL, использую дефолт: @{target_bot}")
 
-                    # Send command to bot
-                    if target_bot:
+                    # Send command to bot only if it's not a channel
+                    if target_bot and not is_channel:
                         if is_giveaway_code:
                             # For giveaways, just press the button (don't send command)
                             logger.info(f"🎰 Нажимаю кнопку розыгрыша")
@@ -573,7 +578,10 @@ async def smart_claim(client, event):
                                     asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
                                     return True
                     else:
-                        logger.debug(f"   URL без бота: {original_url[:50]}")
+                        if is_channel:
+                            logger.info(f"   ⚠️ Пропуск канала @{target_bot} - не отправляю команды")
+                        else:
+                            logger.debug(f"   URL без бота: {original_url[:50]}")
     
     return False
 
