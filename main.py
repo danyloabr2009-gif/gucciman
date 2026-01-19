@@ -515,80 +515,25 @@ async def smart_claim(client, event):
                         target_bot = DEFAULT_GIFT_BOT
                         logger.debug(f"   Бот не найден в URL, использую дефолт: @{target_bot}")
 
-                    # Send command to bot only if it's not a channel
-                    if target_bot and not is_channel:
-                        if is_giveaway_code:
-                            # For giveaways, just press the button (don't send command)
-                            logger.info(f"🎰 Нажимаю кнопку розыгрыша")
-                            try:
-                                # Simulate button press by clicking the original button
-                                await client(GetBotCallbackAnswerRequest(
-                                    peer=event.chat_id,
-                                    msg_id=message.id,
-                                    data=btn.data if btn.data else None
-                                ))
-                                elapsed = int((time.time() - claim_start) * 1000)
-                                logger.info(f"✅ УСПЕХ! Кнопка розыгрыша нажата за {elapsed}ms")
-                                stats.gifts_claimed += 1
-                                stats.last_gift_time = datetime.now()
-                                asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
-                                return True
-                            except Exception as e:
-                                logger.error(f"❌ ОШИБКА нажатия кнопки: {e}")
-                                stats.gifts_failed += 1
-                                asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                return True
-                        else:
-                            # Check if this bot needs button press
-                            needs_button_press = target_bot in BUTTON_PRESS_BOTS
-                            
-                            if needs_button_press:
-                                # For anonimgifterbot - just press the button (it sends /start automatically)
-                                logger.info(f"🎯 Нажимаю кнопку 'Активировать чек' @{target_bot}")
-                                try:
-                                    # Press the button - it will automatically send /start to anonimgifterbot
-                                    await client(GetBotCallbackAnswerRequest(
-                                        peer=event.chat_id,
-                                        msg_id=message.id,
-                                        data=btn.data if btn.data else None
-                                    ))
-                                    elapsed = int((time.time() - claim_start) * 1000)
-                                    logger.info(f"✅ УСПЕХ! Кнопка нажата за {elapsed}ms")
-                                    stats.gifts_claimed += 1
-                                    stats.last_gift_time = datetime.now()
-                                    asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
-                                    return True
-                                except Exception as e:
-                                    logger.error(f"❌ ОШИБКА нажатия кнопки: {e}")
-                                    stats.gifts_failed += 1
-                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                    return True
-                            else:
-                                # For regular gifts, send /start with code
-                                logger.info(f"🎯 Отправляю /start @{target_bot}")
-                                try:
-                                    await client.send_message(target_bot, f"/start {start_param}")
-                                    elapsed = int((time.time() - claim_start) * 1000)
-                                    logger.info(f"✅ УСПЕХ! /start отправлен за {elapsed}ms")
-                                    stats.gifts_claimed += 1
-                                    stats.last_gift_time = datetime.now()
-                                    asyncio.create_task(notify_gift(target_bot, start_param, elapsed, True))
-                                    return True
-                                except FloodWaitError as e:
-                                    logger.error(f"🚫 FLOOD WAIT: {e.seconds}s")
-                                    stats.gifts_failed += 1
-                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                    return True
-                                except Exception as e:
-                                    logger.error(f"❌ ОШИБКА отправки /start: {e}")
-                                    stats.gifts_failed += 1
-                                    asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
-                                    return True
-                    else:
-                        if is_channel:
-                            logger.info(f"   ⚠️ Пропуск канала @{target_bot} - не отправляю команды")
-                        else:
-                            logger.debug(f"   URL без бота: {original_url[:50]}")
+                    # For ALL gifts and giveaways - just press the button (no /start commands)
+                    logger.info(f"� Нажимаю кнопку для {reason}")
+                    try:
+                        await client(GetBotCallbackAnswerRequest(
+                            peer=event.chat_id,
+                            msg_id=message.id,
+                            data=btn.data if btn.data else None
+                        ))
+                        elapsed = int((time.time() - claim_start) * 1000)
+                        logger.info(f"✅ УСПЕХ! Кнопка нажата за {elapsed}ms")
+                        stats.gifts_claimed += 1
+                        stats.last_gift_time = datetime.now()
+                        asyncio.create_task(notify_gift(target_bot or "unknown", start_param, elapsed, True))
+                        return True
+                    except Exception as e:
+                        logger.error(f"❌ ОШИБКА нажатия кнопки: {e}")
+                        stats.gifts_failed += 1
+                        asyncio.create_task(notify_gift(target_bot or "unknown", start_param, 0, False))
+                        return True
     
     return False
 
