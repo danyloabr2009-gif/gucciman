@@ -230,11 +230,11 @@ BUTTON_PRESS_CODES = [
     'chk_',      # anonimgifterbot checks ONLY
 ]
 
-# Keywords for giveaway participation buttons
-GIVEAWAY_BUTTONS = [
-    'участвовать', 'участие', 'join', 'take part', 'учавствовать',
-    'принять участие', 'enter', 'participate', 'register',
-    'подписаться', 'подписка', 'subscribe', 'я подписался', 'подписался'
+# Keywords for gift/check buttons ONLY (no giveaways)
+GIFT_BUTTONS = [
+    'активировать', 'получить', 'забрать', 'claim', 'get', 
+    'view', 'open', 'открыть', 'чек', 'gift', 'подарок',
+    'receive', 'collect', 'activate', 'проверить', 'check'
 ]
 
 # Keywords for subscription requirements
@@ -258,16 +258,7 @@ RUN_BUTTONS = [
     'play', 'launch', 'начать', 'continue'
 ]
 
-# Prefixes for GIVEAWAYS (auto-join)
-GIVEAWAY_CODE_PREFIXES = [
-    'lot_join_',      # bestrandom_bot lottery
-    'lot_',           # general lottery
-    'join_',          # join giveaways
-    'bonus_',         # bonus giveaways
-    'give_',          # giveaway codes
-    'prize_',         # prize codes
-    'gift_',          # gift codes
-]
+# NO MORE GIVEAWAYS - only gifts/checks
 
 # Prefixes to IGNORE (not gifts, not giveaways)
 IGNORE_CODE_PREFIXES = [
@@ -321,15 +312,7 @@ def is_gift_code(code: str) -> tuple[bool, str]:
         if code_lower.startswith(prefix):
             return True, f"подарок '{prefix}'"
     
-    # Check GIVEAWAY prefixes
-    for prefix in GIVEAWAY_CODE_PREFIXES:
-        if code_lower.startswith(prefix):
-            return True, f"розыгрыш '{prefix}'"
-    
-    # Check if it's a giveaway button text (no code)
-    giveaway_keywords = ['участвовать', 'участие', 'join', 'take part', 'учавствовать']
-    if any(keyword in code_lower for keyword in giveaway_keywords):
-        return True, "розыгрыш (кнопка)"
+    # NO MORE GIVEAWAYS - only gifts/checks
     
     return False, "неизвестный формат"
 
@@ -345,25 +328,19 @@ async def smart_claim(client, event):
     button_count = sum(len(row) for row in message.buttons)
     logger.info(f"🔘 Сообщение с кнопками! Найдено кнопок: {button_count}")
     
-    # Check if this is a giveaway with conditions OR has participation buttons
-    message_text = (message.text or "").lower()
-    has_subscription = any(word in message_text for word in SUBSCRIPTION_KEYWORDS)
-    has_reaction = any(word in message_text for word in REACTION_KEYWORDS)
-    
-    # Check if message has participation buttons
-    has_participation_buttons = False
+    # Check if message has gift/check buttons
+    has_gift_buttons = False
     for row in message.buttons:
         for btn in row:
             btn_text = (btn.text or "").lower()
-            if any(word in btn_text for word in GIVEAWAY_BUTTONS):
-                has_participation_buttons = True
+            if any(word in btn_text for word in GIFT_BUTTONS):
+                has_gift_buttons = True
                 break
-        if has_participation_buttons:
+        if has_gift_buttons:
             break
     
-    if has_subscription or has_reaction or has_participation_buttons:
-        logger.info(f"🎁 Обнаружен розыгрыш (условия: подписка={has_subscription}, реакция={has_reaction}, кнопка={has_participation_buttons})")
-        return await process_giveaway_with_conditions(client, event, message)
+    if has_gift_buttons:
+        logger.info(f"🎁 Обнаружен подарок/чек - обрабатываем!")
 
     for row_idx, row in enumerate(message.buttons):
         for btn_idx, btn in enumerate(row):
@@ -374,12 +351,11 @@ async def smart_claim(client, event):
             btn_type = "URL" if btn.url else ("CALLBACK" if btn.data else "OTHER")
             logger.debug(f"   [{row_idx}:{btn_idx}] {btn_type}: '{btn_display}'")
             
-            # Check for giveaway participation buttons
-            is_giveaway_button = any(word in btn_text for word in GIVEAWAY_BUTTONS)
-            if is_giveaway_button:
-                logger.info(f"🎰 Найдена кнопка участия: '{btn_display}'")
+            # Check for gift/check buttons
+            is_gift_button = any(word in btn_text for word in GIFT_BUTTONS)
+            if is_gift_button:
+                logger.info(f"� Найдена кнопка подарка/чека: '{btn_display}'")
                 stats.gifts_detected += 1
-                return await process_giveaway_participation(client, event, btn, message)
             
             # Blacklist check
             matched_blacklist = [w for w in BLACKLIST if w in btn_text]
@@ -482,14 +458,8 @@ async def smart_claim(client, event):
                             asyncio.create_task(notify_gift(target_bot, start_param, 0, False))
                             return True
                     
-                    # Determine if it's a giveaway by the reason
-                    is_giveaway_code = "розыгрыш" in reason
-                    
-                    if is_giveaway_code:
-                        logger.info(f"🎰 Код розыгрыша: {start_param}")
-                    else:
-                        logger.info(f"🔗 URL кнопка с кодом: {start_param}")
-                    
+                    # Process as gift/check
+                    logger.info(f"🔗 URL кнопка с кодом: {start_param}")
                     logger.info(f"   📋 Анализ: {reason}")
                     stats.gifts_detected += 1
                 
@@ -516,8 +486,8 @@ async def smart_claim(client, event):
                         target_bot = DEFAULT_GIFT_BOT
                         logger.debug(f"   Бот не найден в URL, использую дефолт: @{target_bot}")
 
-                    # For ALL gifts and giveaways - just press the button (no /start commands)
-                    logger.info(f"� Нажимаю кнопку для {reason}")
+                    # For ALL gifts/checks - just press the button (no /start commands)
+                    logger.info(f"🎯 Нажимаю кнопку для {reason}")
                     try:
                         await client(GetBotCallbackAnswerRequest(
                             peer=event.chat_id,
