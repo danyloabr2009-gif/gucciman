@@ -783,7 +783,12 @@ async def login_with_qr(client):
     qr = qrcode.QRCode()
     qr.add_data(qr_login.url)
     qr.make()
-    qr.print_ascii(invert=True)
+    try:
+            qr.print_ascii(invert=True)
+        except UnicodeEncodeError:
+            # Fallback for Windows encoding issues
+            print(f"QR Code URL: {qr_login.url}")
+            print("Scan this URL with your Telegram app or use Telegram Desktop")
     
     try:
         await qr_login.wait()
