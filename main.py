@@ -740,7 +740,7 @@ def log_stats():
     logger.info(f"📊 СТАТИСТИКА | Uptime: {stats.uptime()}")
     logger.info(f"   📨 Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
     logger.info(f"   🎁 Подарков: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
-    logger.info(f"   ✅ Успешно: {stats.gifts_claimed} | ❌ Ошибок: {stats.gifts_failed}")
+    logger.info(f"   [OK] Успешно: {stats.gifts_claimed} | [ERR] Ошибок: {stats.gifts_failed}")
     
     if stats.gifts_detected > 0:
         success_rate = (stats.gifts_claimed / stats.gifts_detected) * 100
@@ -761,7 +761,7 @@ def log_stats():
         logger.info(f"   ⏰ Последний подарок: {time_str}")
     
     if stats.restarts > 0:
-        logger.info(f"   🔄 Перезапусков: {stats.restarts}")
+        logger.info(f"   [RESTART] Перезапусков: {stats.restarts}")
     
     logger.info("=" * 60)
 
@@ -914,13 +914,13 @@ async def main():
             break
         
         stats.restarts += 1
-        logger.warning(f"🔄 Перезапуск {stats.restarts}/{MAX_RETRIES} через {RETRY_DELAY}s...")
+        logger.warning(f"[RESTART] Перезапуск {stats.restarts}/{MAX_RETRIES} через {RETRY_DELAY}s...")
         await asyncio.sleep(RETRY_DELAY)
     
     if stats.restarts >= MAX_RETRIES:
-        logger.error(f"❌ Превышено максимальное число перезапусков ({MAX_RETRIES})")
+        logger.error(f"[ERROR] Превышено максимальное число перезапусков ({MAX_RETRIES})")
     
-    logger.info("👋 Goodbye!")
+    logger.info("[BYE] Goodbye!")
 
 if __name__ == "__main__":
     asyncio.run(main())
