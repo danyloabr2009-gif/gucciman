@@ -738,18 +738,18 @@ def setup_handlers(client):
 def log_stats():
     """Log current statistics."""
     logger.info("=" * 60)
-    logger.info(f"📊 СТАТИСТИКА | Uptime: {stats.uptime()}")
-    logger.info(f"   📨 Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
-    logger.info(f"   🎁 Подарков: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
+    logger.info(f"[STATS] СТАТИСТИКА | Uptime: {stats.uptime()}")
+    logger.info(f"   [MSG] Сообщений: {stats.messages_total} | С кнопками: {stats.messages_with_buttons}")
+    logger.info(f"   [GIFT] Подарков: {stats.gifts_detected} | Пропущено: {stats.codes_skipped}")
     logger.info(f"   [OK] Успешно: {stats.gifts_claimed} | [ERR] Ошибок: {stats.gifts_failed}")
     
     if stats.gifts_detected > 0:
         success_rate = (stats.gifts_claimed / stats.gifts_detected) * 100
-        logger.info(f"   📈 Успешность: {success_rate:.1f}%")
+        logger.info(f"   [RATE] Успешность: {success_rate:.1f}%")
     
     if stats.messages_total > 0:
         button_rate = (stats.messages_with_buttons / stats.messages_total) * 100
-        logger.info(f"   🔘 С кнопками: {button_rate:.1f}% сообщений")
+        logger.info(f"   [BTN] С кнопками: {button_rate:.1f}% сообщений")
     
     if stats.last_gift_time:
         time_ago = int((datetime.now() - stats.last_gift_time).total_seconds())
@@ -759,7 +759,7 @@ def log_stats():
             time_str = f"{time_ago//60}m назад"
         else:
             time_str = f"{time_ago//3600}h назад"
-        logger.info(f"   ⏰ Последний подарок: {time_str}")
+        logger.info(f"   [TIME] Последний подарок: {time_str}")
     
     if stats.restarts > 0:
         logger.info(f"   [RESTART] Перезапусков: {stats.restarts}")
@@ -865,10 +865,10 @@ async def run_client():
         return False  # Normal disconnect
         
     except KeyboardInterrupt:
-        logger.info("🛑 Остановка по запросу...")
+        logger.info("[STOP] Остановка по запросу...")
         return False
     except Exception as e:
-        logger.error(f"💥 Ошибка: {e}")
+        logger.error(f"[ERROR] Ошибка: {e}")
         logger.error(traceback.format_exc())
         return True  # Should restart
     finally:
