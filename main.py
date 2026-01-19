@@ -228,13 +228,16 @@ BUTTON_PRESS_CODES = [
     'chk_',      # anonimgifterbot checks ONLY
 ]
 
-# Keywords for gift/check buttons ONLY (no giveaways)
-GIFT_BUTTONS = [
-    'активировать', 'получить', 'забрать', 'claim', 'get', 
-    'view', 'open', 'открыть', 'чек', 'gift', 'подарок',
-    'receive', 'collect', 'activate', 'проверить', 'check',
-    'activate check', 'активировать чек',  # Русские и английские кнопки
-    'claim', 'activate', 'участвую', 'участвую!'  # Дополнительные кнопки
+# Keywords for giveaway participation buttons
+GIVEAWAY_BUTTONS = [
+    'участвовать', 'участвую', 'участвую!', 'участвовать (',
+    'participate', 'join', 'enter', 'take part'
+]
+
+# Keywords for gift check buttons  
+GIFT_CHECK_BUTTONS = [
+    'активировать чек', 'активировать', 'чек', 'подарочный чек',
+    'activate check', 'activate', 'check', 'gift check'
 ]
 
 # Keywords for subscription requirements
@@ -328,21 +331,38 @@ async def smart_claim(client, event):
     button_count = sum(len(row) for row in message.buttons)
     logger.info(f"🔘 Сообщение с кнопками! Найдено кнопок: {button_count}")
     
-    # Check if message has gift/check buttons - INSTANT DETECTION
-    has_gift_buttons = False
-    gift_button_text = ""
+    # Check for giveaway buttons - INSTANT DETECTION
+    has_giveaway_button = False
+    giveaway_button_text = ""
+    
+    # Check for gift check buttons - INSTANT DETECTION  
+    has_gift_check_button = False
+    gift_check_button_text = ""
+    
     for row in message.buttons:
         for btn in row:
             btn_text = (btn.text or "").lower()
-            if any(word in btn_text for word in GIFT_BUTTONS):
-                has_gift_buttons = True
-                gift_button_text = btn.text
+            
+            # Check giveaway buttons first
+            if any(word in btn_text for word in GIVEAWAY_BUTTONS):
+                has_giveaway_button = True
+                giveaway_button_text = btn.text
                 break
-        if has_gift_buttons:
+                
+            # Check gift check buttons
+            if any(word in btn_text for word in GIFT_CHECK_BUTTONS):
+                has_gift_check_button = True
+                gift_check_button_text = btn.text
+                break
+                
+        if has_giveaway_button or has_gift_check_button:
             break
     
-    if has_gift_buttons:
-        logger.info(f"🎁 🚨 НАЙДЕН ЧЕК! Кнопка: '{gift_button_text}' - МОМЕНТАЛЬНО НАЖИМАЮ...")
+    if has_giveaway_button:
+        logger.info(f"🎉 🚨 НАЙДЕН РОЗЫГРЫШ! Кнопка: '{giveaway_button_text}' - МОМЕНТАЛЬНО НАЖИМАЮ...")
+        
+    if has_gift_check_button:
+        logger.info(f"🎁 🚨 НАЙДЕН ЧЕК! Кнопка: '{gift_check_button_text}' - МОМЕНТАЛЬНО НАЖИМАЮ...")
 
     for row_idx, row in enumerate(message.buttons):
         for btn_idx, btn in enumerate(row):
@@ -353,10 +373,16 @@ async def smart_claim(client, event):
             btn_type = "URL" if btn.url else ("CALLBACK" if btn.data else "OTHER")
             logger.debug(f"   [{row_idx}:{btn_idx}] {btn_type}: '{btn_display}'")
             
-            # Check for gift/check buttons
-            is_gift_button = any(word in btn_text for word in GIFT_BUTTONS)
-            if is_gift_button:
-                logger.info(f"� Найдена кнопка подарка/чека: '{btn_display}'")
+            # Check for giveaway buttons
+            is_giveaway_button = any(word in btn_text for word in GIVEAWAY_BUTTONS)
+            if is_giveaway_button:
+                logger.info(f"🎉 Найдена кнопка розыгрыша: '{btn_display}'")
+                stats.gifts_detected += 1
+                
+            # Check for gift check buttons
+            is_gift_check_button = any(word in btn_text for word in GIFT_CHECK_BUTTONS)
+            if is_gift_check_button:
+                logger.info(f"🎁 Найдена кнопка чека: '{btn_display}'")
                 stats.gifts_detected += 1
             
             # Blacklist check
@@ -886,7 +912,7 @@ async def main():
     """Main entry point with auto-restart."""
     print()
     logger.info("=" * 50)
-    logger.info("🎁 Telegram Gift Claimer v10.0")
+    logger.info("[GIFT] Telegram Gift Claimer v10.28")
     logger.info("   Auto-restart | Parallel | Notifications")
     logger.info("=" * 50)
     
