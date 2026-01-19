@@ -220,9 +220,7 @@ GIFT_CODE_PREFIXES = [
 
 # Bots that need BUTTON PRESS instead of /start command
 BUTTON_PRESS_BOTS = [
-    'anonimgifterbot',    # Needs button press for chk_ codes
-    'random1zebot',       # Lottery bot - button sends /start automatically
-    'bestrandom_bot',     # Giveaway bot - button sends /start automatically
+    'anonimgifterbot'     # ONLY @anonimgifterbot for checks
 ]
 
 # Gift code prefixes that should use BUTTON PRESS instead of /start
