@@ -123,7 +123,7 @@ class ButtonTriggers:
 class Logger:
     """Professional logging system with Saved Messages integration"""
     
-    def __init__(self, client: TelegramClient):
+    def __init__(self, client: TelegramClient = None):
         self.client = client
         self.stats = Stats()
         
@@ -135,25 +135,41 @@ class Logger:
     def info(self, message: str):
         """Log info message"""
         formatted = self._format_message(message)
-        print(formatted)
+        try:
+            print(formatted)
+        except UnicodeEncodeError:
+            # Fallback for Windows encoding issues
+            print(formatted.encode('ascii', 'ignore').decode('ascii'))
         
     def warning(self, message: str):
         """Log warning message"""
         formatted = self._format_message(f"[WARNING] {message}")
-        print(formatted)
+        try:
+            print(formatted)
+        except UnicodeEncodeError:
+            print(formatted.encode('ascii', 'ignore').decode('ascii'))
         
     def error(self, message: str):
         """Log error message"""
         formatted = self._format_message(f"[ERROR] {message}")
-        print(formatted)
+        try:
+            print(formatted)
+        except UnicodeEncodeError:
+            print(formatted.encode('ascii', 'ignore').decode('ascii'))
         
     def success(self, message: str):
         """Log success message"""
         formatted = self._format_message(f"[SUCCESS] {message}")
-        print(formatted)
+        try:
+            print(formatted)
+        except UnicodeEncodeError:
+            print(formatted.encode('ascii', 'ignore').decode('ascii'))
         
     async def log_to_saved(self, action: str, chat_name: str, details: str = ""):
         """Send log to Saved Messages"""
+        if not self.client:
+            return  # Skip if client not available
+            
         try:
             message = f"[GIFT] Gift Claimer : {action} | {chat_name}"
             if details:
@@ -503,6 +519,15 @@ async def main():
     await bot.run()
 
 if __name__ == "__main__":
+    # Test logging first
+    print("=== TESTING LOGGING ===")
+    test_logger = Logger()
+    test_logger.info("Test info message")
+    test_logger.warning("Test warning message")
+    test_logger.error("Test error message")
+    test_logger.success("Test success message")
+    print("=== LOGGING TEST COMPLETE ===")
+    
     # Validate configuration
     if not API_ID or not API_HASH:
         print("ERROR: API_ID и API_HASH должны быть указаны в .env файле")
