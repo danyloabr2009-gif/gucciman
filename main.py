@@ -263,6 +263,9 @@ GIVEAWAY_CODE_PREFIXES = [
     'lot_',           # general lottery
     'join_',          # join giveaways
     'bonus_',         # bonus giveaways
+    'give_',          # giveaway codes
+    'prize_',         # prize codes
+    'gift_',          # gift codes
 ]
 
 # Prefixes to IGNORE (not gifts, not giveaways)
@@ -307,23 +310,27 @@ def is_gift_code(code: str) -> tuple[bool, str]:
     """Check if code looks like a real gift. Returns (is_gift, reason)."""
     code_lower = code.lower()
     
-    # First check if it's a giveaway code
-    for prefix in GIVEAWAY_CODE_PREFIXES:
-        if code_lower.startswith(prefix):
-            return True, f"розыгрыш '{prefix}'"
-    
-    # Then check if it's in ignore list
+    # Check IGNORE prefixes first
     for prefix in IGNORE_CODE_PREFIXES:
         if code_lower.startswith(prefix):
-            return False, f"игнор-префикс '{prefix}'"
+            return False, f"игнорируемый префикс '{prefix}'"
     
-    # Then check if it's a known gift prefix
+    # Check GIFT prefixes
     for prefix in GIFT_CODE_PREFIXES:
         if code_lower.startswith(prefix):
             return True, f"подарок '{prefix}'"
     
-    # Unknown prefix - still try (might be new format)
-    return True, "неизвестный формат (пробуем)"
+    # Check GIVEAWAY prefixes
+    for prefix in GIVEAWAY_CODE_PREFIXES:
+        if code_lower.startswith(prefix):
+            return True, f"розыгрыш '{prefix}'"
+    
+    # Check if it's a giveaway button text (no code)
+    giveaway_keywords = ['участвовать', 'участие', 'join', 'take part', 'учавствовать']
+    if any(keyword in code_lower for keyword in giveaway_keywords):
+        return True, "розыгрыш (кнопка)"
+    
+    return False, "неизвестный формат"
 
 async def smart_claim(client, event):
     """Detect and claim gifts from message buttons."""
