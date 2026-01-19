@@ -619,7 +619,7 @@ async def process_giveaway_with_conditions(client, event, message):
                     ))
                     logger.info(f"      ✅ Подписка на @{channel} успешна")
                     conditions_met.append(f"подписка @{channel}")
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.2)
                 except Exception as e:
                     logger.warning(f"      ⚠️ Ошибка подписки на @{channel}: {e}")
         
@@ -650,7 +650,7 @@ async def process_giveaway_with_conditions(client, event, message):
                         logger.info(f"   📱 Ответ от бота: {result.message[:60]}...")
                         
                         # Wait a bit for popup to appear
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(0.1)
                         
                         # Try to find and click "Run" button in popup
                         try:
@@ -757,40 +757,29 @@ async def process_message(client, event):
     stats.last_message_time = datetime.now()
     receive_time = time.time()
     
-    # Get chat info
-    chat_title = "Unknown"
-    chat_id = event.chat_id
+    # Get chat info (minimal for speed)
     try:
-        chat = await event.get_chat()
-        if hasattr(chat, 'title'):
-            chat_title = chat.title[:30]
-        elif hasattr(chat, 'username'):
-            chat_title = f"@{chat.username}"
+        chat = await client.get_entity(event.chat_id)
+        chat_name = getattr(chat, 'title', getattr(chat, 'first_name', f"ID:{event.chat_id}"))
     except Exception:
-        pass
+        chat_name = f"ID:{event.chat_id}"
     
-    message = event.message
-    has_buttons = bool(message.buttons)
-    text_preview = (message.text or "")[:50].replace('\n', ' ')
-    if not text_preview and message.media:
-        text_preview = "[Медиа]"
+    # Process the message for gifts IMMEDIATELY
+    try:
+        claimed = await smart_claim(client, event)
+        elapsed = int((time.time() - receive_time) * 1000)
+        
+        if claimed:
+            logger.info(f"🎯 ПОЙМАНО за {elapsed}ms | {chat_name}")
+        else:
+            logger.debug(f"� Пусто ({elapsed}ms)")
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
     
-    # Log incoming message with more details
-    btn_count = sum(len(r) for r in message.buttons) if message.buttons else 0
-    btn_info = f" [🔘 {btn_count}]" if has_buttons else ""
-    logger.info(f"📨 #{stats.messages_total} | {chat_title} ({chat_id}){btn_info}")
-    if text_preview:
-        logger.debug(f"   📝 Текст: {text_preview}...")
-    
-    # Try to claim
-    claim_start = time.time()
-    was_gift = await smart_claim(client, event)
-    
-    if was_gift:
-        total_elapsed = int((time.time() - receive_time) * 1000)
-        claim_elapsed = int((time.time() - claim_start) * 1000)
-        logger.info(f"🎁 ПОДАРОК ОБРАБОТАН! Общее: {total_elapsed}ms | Обработка: {claim_elapsed}ms")
-        log_stats()
+    # Log stats less frequently (every 50 messages)
+    if stats.messages_total % 50 == 0:
+        await log_stats(client)
 
 def setup_handlers(client):
     """Setup message event handlers with parallel processing."""
