@@ -234,7 +234,7 @@ GIFT_BUTTONS = [
     'view', 'open', 'открыть', 'чек', 'gift', 'подарок',
     'receive', 'collect', 'activate', 'проверить', 'check',
     'activate check', 'активировать чек',  # Русские и английские кнопки
-    'claim', 'activate'  # Дополнительные английские кнопки
+    'claim', 'activate', 'участвую', 'участвую!'  # Дополнительные кнопки
 ]
 
 # Keywords for subscription requirements
