@@ -327,19 +327,21 @@ async def smart_claim(client, event):
     button_count = sum(len(row) for row in message.buttons)
     logger.info(f"🔘 Сообщение с кнопками! Найдено кнопок: {button_count}")
     
-    # Check if message has gift/check buttons
+    # Check if message has gift/check buttons - INSTANT DETECTION
     has_gift_buttons = False
+    gift_button_text = ""
     for row in message.buttons:
         for btn in row:
             btn_text = (btn.text or "").lower()
             if any(word in btn_text for word in GIFT_BUTTONS):
                 has_gift_buttons = True
+                gift_button_text = btn.text
                 break
         if has_gift_buttons:
             break
     
     if has_gift_buttons:
-        logger.info(f"🎁 Обнаружен подарок/чек - обрабатываем!")
+        logger.info(f"🎁 🚨 НАЙДЕН ЧЕК! Кнопка: '{gift_button_text}' - МОМЕНТАЛЬНО НАЖИМАЮ...")
 
     for row_idx, row in enumerate(message.buttons):
         for btn_idx, btn in enumerate(row):
@@ -703,8 +705,9 @@ async def process_message(client, event):
     except Exception:
         chat_name = f"ID:{event.chat_id}"
     
-    # MONITORING: Show every message check
-    logger.info(f"👁️ МОНИТОРИНГ: {chat_name} | Сообщение #{event.message.id}")
+    # MONITORING: Show every message check with status
+    message_text = (event.message.text or "")[:50]
+    logger.info(f"👁️ МОНИТОРИНГ: {chat_name} | #{event.message.id} | '{message_text}...'")
     
     # Process the message for gifts IMMEDIATELY
     try:
@@ -712,9 +715,9 @@ async def process_message(client, event):
         elapsed = int((time.time() - receive_time) * 1000)
         
         if claimed:
-            logger.info(f"🎯 ЧЕК ПОЙМАН за {elapsed}ms | {chat_name}")
+            logger.info(f"🎯 ✅ ЧЕК ПОЙМАН за {elapsed}ms | {chat_name}")
         else:
-            logger.debug(f"📝 Не чек ({elapsed}ms)")
+            logger.info(f"📝 ⏭️ Не чек ({elapsed}ms) | {chat_name}")
             
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}")
@@ -830,10 +833,12 @@ async def run_client():
         
         stats.start_time = time.time()
         logger.info("")
-        logger.info("🚀 МОНИТОРИНГ ТГК ЗАПУЩЕН!")
-        logger.info("   👁️ Постоянный мониторинг чеков...")
-        logger.info("   ⚡ Мгновенное нажатие кнопок...")
-        logger.info("   Уведомления: Saved Messages")
+        logger.info("🚀 МОНИТОРИНГ @anonimgifterbot ЗАПУЩЕН!")
+        logger.info("   👁️ Статус: АКТИВЕН")
+        logger.info("   ⚡ Режим: МОМЕНТАЛЬНОЕ НАЖАТИЕ")
+        logger.info("   🎯 Фокус: Чеки с кнопками 'Активировать чек'")
+        logger.info("   📊 Каналов: {} | Ботов: 1".format(len(TARGET_CHANNELS)))
+        logger.info("   📬 Уведомления: Saved Messages")
         logger.info("")
         
         # Send startup notification
