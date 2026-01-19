@@ -234,7 +234,8 @@ BUTTON_PRESS_CODES = [
 GIFT_BUTTONS = [
     'активировать', 'получить', 'забрать', 'claim', 'get', 
     'view', 'open', 'открыть', 'чек', 'gift', 'подарок',
-    'receive', 'collect', 'activate', 'проверить', 'check'
+    'receive', 'collect', 'activate', 'проверить', 'check',
+    'activate check', 'активировать чек'  # Русские и английские кнопки
 ]
 
 # Keywords for subscription requirements
@@ -704,15 +705,18 @@ async def process_message(client, event):
     except Exception:
         chat_name = f"ID:{event.chat_id}"
     
+    # MONITORING: Show every message check
+    logger.info(f"👁️ МОНИТОРИНГ: {chat_name} | Сообщение #{event.message.id}")
+    
     # Process the message for gifts IMMEDIATELY
     try:
         claimed = await smart_claim(client, event)
         elapsed = int((time.time() - receive_time) * 1000)
         
         if claimed:
-            logger.info(f"🎯 ПОЙМАНО за {elapsed}ms | {chat_name}")
+            logger.info(f"🎯 ЧЕК ПОЙМАН за {elapsed}ms | {chat_name}")
         else:
-            logger.debug(f"� Пусто ({elapsed}ms)")
+            logger.debug(f"📝 Не чек ({elapsed}ms)")
             
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}")
@@ -828,8 +832,9 @@ async def run_client():
         
         stats.start_time = time.time()
         logger.info("")
-        logger.info("🚀 МОНИТОРИНГ ЗАПУЩЕН!")
-        logger.info("   Ожидаю сообщения в каналах...")
+        logger.info("🚀 МОНИТОРИНГ ТГК ЗАПУЩЕН!")
+        logger.info("   👁️ Постоянный мониторинг чеков...")
+        logger.info("   ⚡ Мгновенное нажатие кнопок...")
         logger.info("   Уведомления: Saved Messages")
         logger.info("")
         
