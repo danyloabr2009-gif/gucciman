@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_ID = int(os.getenv('API_ID', '28881633'))
-API_HASH = os.getenv('API_HASH', '3a5e6a7c8f9d2b1c4e6a8f3d2b1c4e6a')
+API_HASH = os.getenv('API_HASH', '0a2b4c5d6e7f8a9b0c1d2e3f4a5b6c7d')
 TARGET_CHANNELS = [int(x.strip()) for x in os.getenv('TARGET_CHANNELS', '-1003066572414').split(',') if x.strip()]
 GIFT_BOT = "anonimgifterbot"
 SESSION_NAME = "gift_claimer_session"
