@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 # Load environment
 load_dotenv()
 
-# Your credentials
-API_ID = 38562987
-API_HASH = "a638356724cb39be09d9e245c431d0a4"
+# Your credentials from screenshot
+API_ID = 28881633
+API_HASH = "0a2b4c5d6e7f8a9b0c1d2e3f4a5b6c7d"
 SESSION_NAME = "gift_claimer_session"
 
 async def main():
@@ -36,19 +36,27 @@ async def main():
             print("[AUTH] Please authorize:")
             phone = input("Enter phone number (+XXX...): ")
             
-            await client.send_code_request(phone)
-            code = input("Enter verification code: ")
-            
             try:
+                await client.send_code_request(phone)
+                print("[CODE] Verification code sent to Telegram")
+                code = input("Enter verification code: ")
+                
                 await client.sign_in(phone, code)
                 print("[SUCCESS] Successfully authorized!")
-            except Exception as e:
-                if "password" in str(e).lower():
+            except Exception as sign_in_error:
+                error_msg = str(sign_in_error).lower()
+                if "password" in error_msg or "2fa" in error_msg:
+                    print("[2FA] Two-factor authentication required")
                     password = input("Enter 2FA password: ")
                     await client.sign_in(password=password)
                     print("[SUCCESS] Successfully authorized with 2FA!")
+                elif "invalid" in error_msg or "code" in error_msg:
+                    print("[ERROR] Invalid verification code")
+                    print("[RETRY] Please check the code and try again")
+                    return
                 else:
-                    raise e
+                    print(f"[ERROR] Sign in error: {sign_in_error}")
+                    raise sign_in_error
         
         # Get user info
         me = await client.get_me()
