@@ -93,8 +93,7 @@ class ButtonTriggers:
     
     # Gift checks
     GIFT_CHECK_BUTTONS = [
-        'активировать чек', 'получить', 'забрать', 'claim', 'get',
-        'activate check', 'activate', 'receive', 'collect'
+        'активировать чек'
     ]
     
     # Fast click buttons
@@ -280,29 +279,9 @@ class ButtonProcessor:
                     data=button_info.data
                 ))
             elif button_info.type == 'url' and button_info.url:
-                # Handle URL buttons
-                try:
-                    # Extract parameters from URL
-                    url = button_info.url
-                    
-                    # Check if it's a Telegram bot URL with start parameter
-                    if 't.me/' in url and ('start=' in url or 'startapp=' in url):
-                        # Extract start parameter
-                        if 'start=' in url:
-                            start_param = url.split('start=')[1].split('&')[0]
-                        elif 'startapp=' in url:
-                            start_param = url.split('startapp=')[1].split('&')[0]
-                        
-                        # Send /start command to bot
-                        bot_username = url.split('t.me/')[1].split('?')[0]
-                        await self.client.send_message(bot_username, f'/start {start_param}')
-                        
-                        self.logger.success(f"[SUCCESS] URL обработан: @{bot_username}")
-                        return True
-                        
-                except Exception as e:
-                    self.logger.error(f"[ERROR] Ошибка обработки URL: {e}")
-                    return False
+                # Skip URL buttons - we only want callback buttons for "Активировать чек"
+                self.logger.info(f"[SKIP] URL кнопка пропущена: {button_info.text}")
+                return False
             else:
                 return False
             
