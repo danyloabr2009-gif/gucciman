@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 # Load environment
 load_dotenv()
 
-# Your credentials from screenshot
-API_ID = 28881633
-API_HASH = "0a2b4c5d6e7f8a9b0c1d2e3f4a5b6c7d"
+# Your credentials
+API_ID = 38562987
+API_HASH = "a638356724cb39be09d9e245c431d0a4"
 SESSION_NAME = "gift_claimer_session"
 
 async def main():
